@@ -299,6 +299,9 @@
       <button id="clearBtn" class="secondary" disabled>Clear Courts</button>
     </div>
     <div class="field">
+      <button id="downloadBtn" class="secondary" disabled>Download Courts Image</button>
+    </div>
+    <div class="field">
       <label>&nbsp;</label>
       <span class="file-hint">Needs columns: Name, Level, Sex, Availability. Availability values like Yes/No, Y/N, True/False, Available/Unavailable, 1/0 are all understood.</span>
     </div>
@@ -360,6 +363,7 @@
   const orgPlaySelect = document.getElementById('orgPlay');
   const autoAssignBtn = document.getElementById('autoAssignBtn');
   const clearBtn = document.getElementById('clearBtn');
+  const downloadBtn = document.getElementById('downloadBtn');
   const statusLine = document.getElementById('statusLine');
   const errorBox = document.getElementById('errorBox');
   const courtsGrid = document.getElementById('courtsGrid');
@@ -381,6 +385,7 @@
   orgPlaySelect.addEventListener('change', render);
   autoAssignBtn.addEventListener('click', autoAssign);
   clearBtn.addEventListener('click', clearCourts);
+  downloadBtn.addEventListener('click', downloadCourtsImage);
   attachContainerHandlers(benchPanel, 'bench'); // bench node persists across renders; attach once
 
   function showError(msg) {
@@ -487,6 +492,7 @@
     bench = allPlayers.filter(p => p.available);
     autoAssignBtn.disabled = false;
     clearBtn.disabled = false;
+    downloadBtn.disabled = false;
     render();
   }
 
@@ -727,6 +733,199 @@
     boxes = Array.from({ length: NUM_COURTS }, () => []);
     bench = [...bench, ...inCourts];
     render();
+  }
+
+  // ---------- Downloadable image ----------
+  // Drawn from scratch on a <canvas> rather than rasterizing the live DOM, so
+  // it needs no external screenshot library (e.g. html2canvas) and the app
+  // stays a single dependency-free file that works offline.
+  const UI_FONT = '-apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif';
+
+  function cssVar(name, fallback) {
+    const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+    return v || fallback;
+  }
+
+  function roundRectPath(ctx, x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + w - r, y);
+    ctx.arcTo(x + w, y, x + w, y + r, r);
+    ctx.lineTo(x + w, y + h - r);
+    ctx.arcTo(x + w, y + h, x + w - r, y + h, r);
+    ctx.lineTo(x + r, y + h);
+    ctx.arcTo(x, y + h, x, y + h - r, r);
+    ctx.lineTo(x, y + r);
+    ctx.arcTo(x, y, x + r, y, r);
+    ctx.closePath();
+  }
+
+  function downloadCourtsImage() {
+    if (!allPlayers.length) { showError('Load a roster first.'); return; }
+    showError('');
+
+    const mode = orgPlaySelect.value;
+    const ink = cssVar('--ink', '#1f2933');
+    const muted = cssVar('--muted', '#6b7280');
+    const greenBg = cssVar('--green-bg', '#e6f6e9');
+    const greenBorder = cssVar('--green-border', '#2e9e4f');
+    const redBg = cssVar('--red-bg', '#fbe7e7');
+    const redBorder = cssVar('--red-border', '#c0392b');
+    const chipBorder = '#d5d9de';
+
+    const W = 1200;
+    const PAD = 32;
+    const COLS = 3, ROWS = 2, GAP = 20;
+    const CELL_W = (W - PAD * 2 - GAP * (COLS - 1)) / COLS;
+    const HEADER_H = 96;
+    // Cells auto-grow to fit the fullest court, mirroring how the on-screen
+    // boxes grow instead of clipping if a court ever holds more than 4.
+    const maxRows = Math.max(COURT_SIZE, ...boxes.map(b => b.length));
+    const chipRowH = 36;
+    const cellChromeH = 76; // title/badge/count rows + top+bottom padding
+    const CELL_H = cellChromeH + maxRows * chipRowH;
+    const GRID_H = CELL_H * ROWS + GAP * (ROWS - 1);
+
+    // Bench chips wrap left-to-right like the on-screen bench; measure with a
+    // scratch context first so the final canvas can be sized exactly.
+    const scratch = document.createElement('canvas').getContext('2d');
+    const chipFont = `13px ${UI_FONT}`;
+    scratch.font = chipFont;
+    const chipPadX = 10, chipGap = 8, chipH = 28, chipLineGap = 8;
+    const benchAvailW = W - PAD * 2;
+    const benchItems = bench.map(p => {
+      const label = p.name;
+      return { label, chipW: scratch.measureText(label).width + chipPadX * 2 };
+    });
+    const benchLines = [[]];
+    let cursorX = 0;
+    benchItems.forEach(item => {
+      if (cursorX > 0 && cursorX + item.chipW > benchAvailW) {
+        benchLines.push([]);
+        cursorX = 0;
+      }
+      benchLines[benchLines.length - 1].push(item);
+      cursorX += item.chipW + chipGap;
+    });
+    const benchTitleH = 28;
+    const benchLinesH = bench.length ? benchLines.length * (chipH + chipLineGap) : 24;
+    const benchSectionH = benchTitleH + benchLinesH + 10;
+
+    const totalH = HEADER_H + GRID_H + GAP + benchSectionH + PAD;
+
+    const dpr = Math.min(window.devicePixelRatio || 1, 3);
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.round(W * dpr);
+    canvas.height = Math.round(totalH * dpr);
+    const ctx = canvas.getContext('2d');
+    ctx.scale(dpr, dpr);
+    ctx.textBaseline = 'top';
+
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, W, totalH);
+
+    ctx.fillStyle = ink;
+    ctx.font = `bold 22px ${UI_FONT}`;
+    ctx.fillText('STA Sunday Program Scheduler', PAD, PAD);
+
+    ctx.fillStyle = muted;
+    ctx.font = `13px ${UI_FONT}`;
+    const stamp = new Date().toLocaleString();
+    ctx.fillText(`Organized Play: ${specLabel(mode)}  ·  Generated ${stamp}`, PAD, PAD + 32);
+
+    boxes.forEach((players, i) => {
+      const col = i % COLS;
+      const row = Math.floor(i / COLS);
+      const x = PAD + col * (CELL_W + GAP);
+      const y = HEADER_H + row * (CELL_H + GAP);
+      const ok = boxSpecOk(players, mode);
+
+      ctx.lineWidth = 3;
+      ctx.fillStyle = ok ? greenBg : redBg;
+      ctx.strokeStyle = ok ? greenBorder : redBorder;
+      roundRectPath(ctx, x, y, CELL_W, CELL_H, 12);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = ink;
+      ctx.font = `bold 15px ${UI_FONT}`;
+      ctx.fillText(`Court ${i + 1}`, x + 14, y + 14);
+
+      const badgeText = ok ? 'OK' : 'NEEDS FIX';
+      ctx.font = `bold 11px ${UI_FONT}`;
+      const badgeW = ctx.measureText(badgeText).width + 16;
+      const badgeH = 20;
+      const badgeX = x + CELL_W - 14 - badgeW;
+      const badgeY = y + 14;
+      ctx.fillStyle = ok ? greenBorder : redBorder;
+      roundRectPath(ctx, badgeX, badgeY, badgeW, badgeH, badgeH / 2);
+      ctx.fill();
+      ctx.fillStyle = '#ffffff';
+      ctx.textAlign = 'center';
+      ctx.fillText(badgeText, badgeX + badgeW / 2, badgeY + 4);
+      ctx.textAlign = 'left';
+
+      ctx.fillStyle = muted;
+      ctx.font = `11px ${UI_FONT}`;
+      ctx.fillText(`${players.length} / ${COURT_SIZE} players`, x + 14, y + 40);
+
+      let py = y + 62;
+      const chipInnerW = CELL_W - 28;
+      players.forEach(p => {
+        ctx.lineWidth = 1;
+        ctx.fillStyle = '#ffffff';
+        ctx.strokeStyle = chipBorder;
+        roundRectPath(ctx, x + 14, py, chipInnerW, 30, 6);
+        ctx.fill();
+        ctx.stroke();
+        ctx.fillStyle = ink;
+        ctx.font = chipFont;
+        ctx.fillText(p.name, x + 14 + chipPadX, py + 8);
+        py += chipRowH;
+      });
+    });
+
+    let by = HEADER_H + GRID_H + GAP;
+    ctx.fillStyle = ink;
+    ctx.font = `bold 14px ${UI_FONT}`;
+    ctx.fillText('Bench (available, unassigned)', PAD, by);
+    by += benchTitleH;
+
+    if (!bench.length) {
+      ctx.fillStyle = muted;
+      ctx.font = `italic 13px ${UI_FONT}`;
+      ctx.fillText('No unassigned available players.', PAD, by);
+    } else {
+      ctx.font = chipFont;
+      benchLines.forEach(line => {
+        let bx = PAD;
+        line.forEach(item => {
+          ctx.lineWidth = 1;
+          ctx.fillStyle = '#ffffff';
+          ctx.strokeStyle = chipBorder;
+          roundRectPath(ctx, bx, by, item.chipW, chipH, 6);
+          ctx.fill();
+          ctx.stroke();
+          ctx.fillStyle = ink;
+          ctx.fillText(item.label, bx + chipPadX, by + 7);
+          bx += item.chipW + chipGap;
+        });
+        by += chipH + chipLineGap;
+      });
+    }
+
+    canvas.toBlob(blob => {
+      if (!blob) { showError('Could not generate the image.'); return; }
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      const ts = new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-');
+      a.href = url;
+      a.download = `sta-sunday-courts-${ts}.png`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }, 'image/png');
   }
 
   // ---------- Moving players: tap-to-swap ----------

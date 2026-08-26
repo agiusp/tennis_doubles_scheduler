@@ -24,6 +24,7 @@ A single-page, no-install web app for assigning available players to 6 courts on
    
    A court turns **green** when it has exactly 4 players who satisfy the selected format, and **red** otherwise.
 6. Use **Clear Courts** to send everyone back to the bench without re-running the file load.
+7. Click **Download Courts Image** to save a PNG snapshot of the 6 courts (with each player's name/sex/level and the green/red status) plus the bench, for printing or sharing in a text/group chat. It's drawn fresh from the current data, not a literal screenshot, so it looks the same crisp layout regardless of your screen size.
 
 Only players marked as available are ever placed on a court or shown in the bench; unavailable players are excluded entirely (the status line reports how many were excluded).
 
