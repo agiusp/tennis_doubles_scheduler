@@ -1,0 +1,724 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>STA Sunday Program Scheduler</title>
+<style>
+  :root {
+    --green-bg: #e6f6e9;
+    --green-border: #2e9e4f;
+    --red-bg: #fbe7e7;
+    --red-border: #c0392b;
+    --ink: #1f2933;
+    --muted: #6b7280;
+    --panel: #ffffff;
+    --page-bg: #f4f5f7;
+    --accent: #2b6cb0;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    background: var(--page-bg);
+    color: var(--ink);
+    padding: 24px;
+  }
+  h1 {
+    font-size: 22px;
+    margin: 0 0 4px 0;
+  }
+  .subtitle {
+    color: var(--muted);
+    font-size: 13px;
+    margin-bottom: 20px;
+  }
+  .panel {
+    background: var(--panel);
+    border: 1px solid #e2e5e9;
+    border-radius: 10px;
+    padding: 16px 18px;
+    margin-bottom: 18px;
+  }
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    align-items: flex-end;
+  }
+  .field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .field label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+  select, input[type="file"] {
+    font-size: 14px;
+    padding: 7px 9px;
+    border: 1px solid #cbd2d9;
+    border-radius: 6px;
+    background: #fff;
+    color: var(--ink);
+  }
+  button {
+    font-size: 14px;
+    padding: 8px 14px;
+    border-radius: 6px;
+    border: 1px solid var(--accent);
+    background: var(--accent);
+    color: #fff;
+    cursor: pointer;
+  }
+  button.secondary {
+    background: #fff;
+    color: var(--accent);
+  }
+  button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  button:hover:not(:disabled) { filter: brightness(0.95); }
+  .status-line {
+    margin-top: 12px;
+    font-size: 13px;
+    color: var(--muted);
+  }
+  .status-line strong { color: var(--ink); }
+  .courts-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    margin-bottom: 18px;
+  }
+  @media (max-width: 760px) {
+    .courts-grid { grid-template-columns: repeat(1, 1fr); }
+  }
+  .court {
+    border-radius: 10px;
+    border: 2px solid var(--red-border);
+    background: var(--red-bg);
+    min-height: 190px;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    transition: background 0.15s, border-color 0.15s;
+  }
+  .court.valid {
+    border-color: var(--green-border);
+    background: var(--green-bg);
+  }
+  .court.drag-over {
+    outline: 2px dashed var(--accent);
+    outline-offset: 2px;
+  }
+  .court-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+  }
+  .court-title {
+    font-weight: 700;
+    font-size: 14px;
+  }
+  .court-badge {
+    font-size: 11px;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 20px;
+    color: #fff;
+  }
+  .court-badge.ok { background: var(--green-border); }
+  .court-badge.bad { background: var(--red-border); }
+  .court-count {
+    font-size: 11px;
+    color: var(--muted);
+    margin-bottom: 6px;
+  }
+  .player-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    flex: 1;
+  }
+  .chip {
+    background: #fff;
+    border: 1px solid #d5d9de;
+    border-radius: 6px;
+    padding: 8px 10px;
+    font-size: 13px;
+    cursor: grab;
+    user-select: none;
+    touch-action: manipulation;
+    min-height: 40px;
+    display: flex;
+    align-items: center;
+  }
+  .chip:active { cursor: grabbing; }
+  .chip.dragging { opacity: 0.4; }
+  .chip.selected {
+    border-color: var(--accent);
+    background: #eaf2fb;
+    box-shadow: 0 0 0 2px var(--accent);
+  }
+  .court.droppable,
+  .bench.droppable {
+    outline: 2px dashed var(--accent);
+    outline-offset: 2px;
+    cursor: pointer;
+  }
+  .move-hint {
+    position: sticky;
+    top: 8px;
+    z-index: 5;
+    background: #eaf2fb;
+    border: 1px solid var(--accent);
+    color: #1c4a73;
+    padding: 10px 14px;
+    border-radius: 8px;
+    font-size: 13px;
+    margin-bottom: 14px;
+  }
+  .bench {
+    border: 2px dashed #b0b8c1;
+    border-radius: 10px;
+    background: #fbfbfc;
+    padding: 12px;
+    min-height: 70px;
+  }
+  .bench.drag-over {
+    outline: 2px dashed var(--accent);
+    outline-offset: 2px;
+  }
+  .bench-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+  }
+  .bench-title { font-weight: 700; font-size: 14px; }
+  .bench-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .bench-empty {
+    color: var(--muted);
+    font-size: 13px;
+    font-style: italic;
+  }
+  .legend {
+    display: flex;
+    gap: 18px;
+    font-size: 12px;
+    color: var(--muted);
+    margin-top: 10px;
+    flex-wrap: wrap;
+  }
+  .legend-item { display: flex; align-items: center; gap: 6px; }
+  .swatch { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+  .swatch.green { background: var(--green-bg); border: 2px solid var(--green-border); }
+  .swatch.red { background: var(--red-bg); border: 2px solid var(--red-border); }
+  .file-hint {
+    font-size: 11px;
+    color: var(--muted);
+    max-width: 260px;
+  }
+  .error-box {
+    background: #fbe7e7;
+    border: 1px solid var(--red-border);
+    color: #7a2320;
+    padding: 10px 12px;
+    border-radius: 6px;
+    font-size: 13px;
+    margin-top: 12px;
+  }
+  button, select, input[type="file"] {
+    touch-action: manipulation;
+  }
+  @media (max-width: 480px) {
+    body { padding: 14px; }
+    h1 { font-size: 19px; }
+    .panel { padding: 12px; }
+    .controls { flex-direction: column; align-items: stretch; gap: 12px; }
+    .field, .field select, .field input[type="file"], .field button {
+      width: 100%;
+    }
+    button { min-height: 44px; }
+    .file-hint { max-width: none; }
+    .chip { font-size: 14px; }
+    .courts-grid { gap: 12px; }
+    .court { min-height: 150px; }
+    .legend { font-size: 11px; gap: 10px; }
+  }
+</style>
+</head>
+<body>
+
+<h1>STA Sunday Program Scheduler</h1>
+<div class="subtitle">Load your roster, pick an Organized Play format, auto-assign courts, then drag (or tap to pick up, tap to place) names between boxes to fine-tune.</div>
+
+<div class="panel">
+  <div class="controls">
+    <div class="field">
+      <label for="csvFile">Roster file (CSV)</label>
+      <input type="file" id="csvFile" accept=".csv,text/csv">
+    </div>
+    <div class="field">
+      <label for="orgPlay">Organized Play</label>
+      <select id="orgPlay">
+        <option value="same-sex">Same-sex doubles</option>
+        <option value="mixed">Mixed doubles</option>
+        <option value="level">By play level</option>
+        <option value="level-samesex">By play level and same-sex doubles</option>
+        <option value="level-mixed">By play level and mixed doubles</option>
+      </select>
+    </div>
+    <div class="field">
+      <button id="autoAssignBtn" disabled>Auto-Assign Courts</button>
+    </div>
+    <div class="field">
+      <button id="clearBtn" class="secondary" disabled>Clear Courts</button>
+    </div>
+    <div class="field">
+      <label>&nbsp;</label>
+      <span class="file-hint">CSV needs columns: Name, Level, Sex, Availability. Availability values like Yes/No, Y/N, True/False, Available/Unavailable, 1/0 are all understood.</span>
+    </div>
+  </div>
+  <div class="status-line" id="statusLine">No roster loaded yet.</div>
+  <div id="errorBox"></div>
+</div>
+
+<div class="move-hint" id="moveHint" hidden></div>
+
+<div class="courts-grid" id="courtsGrid"></div>
+
+<div class="panel bench" id="benchPanel">
+  <div class="bench-header">
+    <div class="bench-title">Bench (available, unassigned)</div>
+    <div class="court-count" id="benchCount"></div>
+  </div>
+  <div class="bench-list" id="benchList"></div>
+</div>
+
+<div class="legend">
+  <div class="legend-item"><span class="swatch green"></span> Meets the selected Organized Play spec (and has exactly 4 players)</div>
+  <div class="legend-item"><span class="swatch red"></span> Does not meet the spec, or does not have exactly 4 players</div>
+</div>
+
+<script>
+(function () {
+  const NUM_COURTS = 6;
+  const COURT_SIZE = 4;
+
+  /** @type {{id:number,name:string,level:string,sex:string,available:boolean}[]} */
+  let allPlayers = [];
+  let boxes = Array.from({ length: NUM_COURTS }, () => []);
+  let bench = [];
+
+  const fileInput = document.getElementById('csvFile');
+  const orgPlaySelect = document.getElementById('orgPlay');
+  const autoAssignBtn = document.getElementById('autoAssignBtn');
+  const clearBtn = document.getElementById('clearBtn');
+  const statusLine = document.getElementById('statusLine');
+  const errorBox = document.getElementById('errorBox');
+  const courtsGrid = document.getElementById('courtsGrid');
+  const benchList = document.getElementById('benchList');
+  const benchCount = document.getElementById('benchCount');
+  const benchPanel = document.getElementById('benchPanel');
+  const moveHint = document.getElementById('moveHint');
+
+  fileInput.addEventListener('change', handleFile);
+  orgPlaySelect.addEventListener('change', render);
+  autoAssignBtn.addEventListener('click', autoAssign);
+  clearBtn.addEventListener('click', clearCourts);
+  attachContainerHandlers(benchPanel, 'bench'); // bench node persists across renders; attach once
+
+  function showError(msg) {
+    errorBox.innerHTML = msg ? `<div class="error-box">${escapeHtml(msg)}</div>` : '';
+  }
+
+  function escapeHtml(str) {
+    return String(str).replace(/[&<>"']/g, c => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    }[c]));
+  }
+
+  // ---------- CSV parsing ----------
+  function parseCSV(text) {
+    const rows = [];
+    let row = [];
+    let field = '';
+    let inQuotes = false;
+    for (let i = 0; i < text.length; i++) {
+      const c = text[i];
+      if (inQuotes) {
+        if (c === '"') {
+          if (text[i + 1] === '"') { field += '"'; i++; }
+          else { inQuotes = false; }
+        } else {
+          field += c;
+        }
+      } else {
+        if (c === '"') inQuotes = true;
+        else if (c === ',') { row.push(field); field = ''; }
+        else if (c === '\n') { row.push(field); rows.push(row); row = []; field = ''; }
+        else if (c === '\r') { /* skip */ }
+        else field += c;
+      }
+    }
+    if (field.length > 0 || row.length > 0) { row.push(field); rows.push(row); }
+    return rows.filter(r => r.some(cell => cell.trim() !== ''));
+  }
+
+  function normalizeSex(val) {
+    const v = (val || '').trim().toLowerCase();
+    if (v.startsWith('m')) return 'M';
+    if (v.startsWith('f')) return 'F';
+    return (val || '').trim().toUpperCase() || '?';
+  }
+
+  function isAvailable(val) {
+    const v = (val || '').trim().toLowerCase();
+    return ['yes', 'y', 'true', '1', 'available', 'avail'].includes(v);
+  }
+
+  function handleFile(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = function (evt) {
+      try {
+        loadRoster(evt.target.result);
+      } catch (err) {
+        showError('Could not parse file: ' + err.message);
+      }
+    };
+    reader.onerror = function () {
+      showError('Could not read the selected file.');
+    };
+    reader.readAsText(file);
+  }
+
+  function loadRoster(text) {
+    showError('');
+    const rows = parseCSV(text);
+    if (rows.length < 2) throw new Error('File appears to have no data rows.');
+
+    const header = rows[0].map(h => h.trim().toLowerCase());
+    const idx = {
+      name: header.indexOf('name'),
+      level: header.indexOf('level'),
+      sex: header.indexOf('sex'),
+      availability: header.indexOf('availability')
+    };
+    const missing = Object.entries(idx).filter(([, i]) => i === -1).map(([k]) => k);
+    if (missing.length) {
+      throw new Error('Missing required column(s): ' + missing.join(', '));
+    }
+
+    const players = [];
+    for (let r = 1; r < rows.length; r++) {
+      const row = rows[r];
+      const name = (row[idx.name] || '').trim();
+      if (!name) continue;
+      players.push({
+        id: r,
+        name,
+        level: (row[idx.level] || '').trim(),
+        sex: normalizeSex(row[idx.sex]),
+        available: isAvailable(row[idx.availability])
+      });
+    }
+
+    if (!players.length) throw new Error('No player rows found.');
+
+    allPlayers = players;
+    boxes = Array.from({ length: NUM_COURTS }, () => []);
+    bench = allPlayers.filter(p => p.available);
+    autoAssignBtn.disabled = false;
+    clearBtn.disabled = false;
+    render();
+  }
+
+  // ---------- Organized Play validation ----------
+  function boxSpecOk(players, mode) {
+    if (players.length !== COURT_SIZE) return false;
+    const sexes = players.map(p => p.sex);
+    const levels = players.map(p => p.level);
+    const allSameSex = sexes.every(s => s === sexes[0]);
+    const allSameLevel = levels.every(l => l === levels[0]);
+    const mCount = sexes.filter(s => s === 'M').length;
+    const fCount = sexes.filter(s => s === 'F').length;
+    const isMixed2v2 = mCount === 2 && fCount === 2;
+
+    switch (mode) {
+      case 'same-sex': return allSameSex;
+      case 'mixed': return isMixed2v2;
+      case 'level': return allSameLevel;
+      case 'level-samesex': return allSameLevel && allSameSex;
+      case 'level-mixed': return allSameLevel && isMixed2v2;
+      default: return false;
+    }
+  }
+
+  function specLabel(mode) {
+    return {
+      'same-sex': 'Same-sex doubles',
+      'mixed': 'Mixed doubles',
+      'level': 'By play level',
+      'level-samesex': 'By play level and same-sex doubles',
+      'level-mixed': 'By play level and mixed doubles'
+    }[mode];
+  }
+
+  // ---------- Auto-assign heuristics ----------
+  function groupBy(arr, keyFn) {
+    const map = new Map();
+    for (const item of arr) {
+      const k = keyFn(item);
+      if (!map.has(k)) map.set(k, []);
+      map.get(k).push(item);
+    }
+    return map;
+  }
+
+  function chunk4(arr) {
+    const out = [];
+    for (let i = 0; i < arr.length; i += COURT_SIZE) {
+      out.push(arr.slice(i, i + COURT_SIZE));
+    }
+    return out;
+  }
+
+  function pairMixedGroups(mList, fList) {
+    const groups = [];
+    const m = [...mList], f = [...fList];
+    while (m.length >= 2 && f.length >= 2) {
+      groups.push([m.shift(), m.shift(), f.shift(), f.shift()]);
+    }
+    const leftover = [...m, ...f];
+    return { groups, leftover };
+  }
+
+  function autoAssign() {
+    const mode = orgPlaySelect.value;
+    const pool = allPlayers.filter(p => p.available);
+    let groups = [];
+    let leftover = [];
+
+    if (mode === 'same-sex') {
+      const bySex = groupBy(pool, p => p.sex);
+      for (const [, list] of bySex) {
+        const chunks = chunk4(list);
+        chunks.forEach((c, i) => {
+          if (c.length === COURT_SIZE) groups.push(c);
+          else leftover.push(...c);
+        });
+      }
+    } else if (mode === 'mixed') {
+      const m = pool.filter(p => p.sex === 'M');
+      const f = pool.filter(p => p.sex === 'F');
+      const res = pairMixedGroups(m, f);
+      groups = res.groups;
+      leftover = res.leftover;
+    } else if (mode === 'level') {
+      const byLevel = groupBy(pool, p => p.level);
+      for (const [, list] of byLevel) {
+        const chunks = chunk4(list);
+        chunks.forEach(c => {
+          if (c.length === COURT_SIZE) groups.push(c);
+          else leftover.push(...c);
+        });
+      }
+    } else if (mode === 'level-samesex') {
+      const byLevelSex = groupBy(pool, p => p.level + '|' + p.sex);
+      for (const [, list] of byLevelSex) {
+        const chunks = chunk4(list);
+        chunks.forEach(c => {
+          if (c.length === COURT_SIZE) groups.push(c);
+          else leftover.push(...c);
+        });
+      }
+    } else if (mode === 'level-mixed') {
+      const byLevel = groupBy(pool, p => p.level);
+      for (const [, list] of byLevel) {
+        const m = list.filter(p => p.sex === 'M');
+        const f = list.filter(p => p.sex === 'F');
+        const res = pairMixedGroups(m, f);
+        groups.push(...res.groups);
+        leftover.push(...res.leftover);
+      }
+    }
+
+    // Largest groups first isn't critical here since all full groups are size 4;
+    // fill courts in order, remainder goes to bench.
+    boxes = Array.from({ length: NUM_COURTS }, () => []);
+    for (let i = 0; i < NUM_COURTS && i < groups.length; i++) {
+      boxes[i] = groups[i];
+    }
+    for (let i = NUM_COURTS; i < groups.length; i++) {
+      leftover.push(...groups[i]);
+    }
+    bench = leftover;
+    render();
+  }
+
+  function clearCourts() {
+    const inCourts = boxes.flat();
+    boxes = Array.from({ length: NUM_COURTS }, () => []);
+    bench = [...bench, ...inCourts];
+    render();
+  }
+
+  // ---------- Drag & drop ----------
+  let dragSource = null; // { playerId, from: 'bench' | courtIndex }
+
+  function findAndRemove(playerId, from) {
+    if (from === 'bench') {
+      const i = bench.findIndex(p => p.id === playerId);
+      if (i !== -1) return bench.splice(i, 1)[0];
+    } else {
+      const arr = boxes[from];
+      const i = arr.findIndex(p => p.id === playerId);
+      if (i !== -1) return arr.splice(i, 1)[0];
+    }
+    return null;
+  }
+
+  function onDrop(target) {
+    if (!dragSource) return;
+    const player = findAndRemove(dragSource.playerId, dragSource.from);
+    if (!player) return;
+    if (target === 'bench') bench.push(player);
+    else boxes[target].push(player);
+    dragSource = null;
+    render();
+  }
+
+  function findPlayerById(id) {
+    const inBench = bench.find(p => p.id === id);
+    if (inBench) return inBench;
+    for (const arr of boxes) {
+      const found = arr.find(p => p.id === id);
+      if (found) return found;
+    }
+    return null;
+  }
+
+  // Tap-to-move: tap a chip to pick it up, tap a court/bench to place it there.
+  // This is the primary way to move players on touch devices, since native
+  // HTML5 drag-and-drop (used below for desktop mouse dragging) isn't
+  // reliably supported on phone/tablet browsers.
+  function selectOrToggle(playerId, from) {
+    if (dragSource && dragSource.playerId === playerId) {
+      dragSource = null;
+    } else {
+      dragSource = { playerId, from };
+    }
+    render();
+  }
+
+  // ---------- Rendering ----------
+  function chipHtml(player, from) {
+    const isSelected = dragSource && dragSource.playerId === player.id;
+    return `<div class="chip${isSelected ? ' selected' : ''}" draggable="true" data-id="${player.id}" data-from="${from}">
+      ${escapeHtml(player.name)}, ${escapeHtml(player.sex)}, ${escapeHtml(player.level)}
+    </div>`;
+  }
+
+  function attachChipHandlers(container) {
+    container.querySelectorAll('.chip').forEach(chip => {
+      const id = Number(chip.dataset.id);
+      const fromRaw = chip.dataset.from;
+      const from = fromRaw === 'bench' ? 'bench' : Number(fromRaw);
+
+      chip.addEventListener('dragstart', e => {
+        dragSource = { playerId: id, from };
+        chip.classList.add('dragging');
+        e.dataTransfer.effectAllowed = 'move';
+      });
+      chip.addEventListener('dragend', () => chip.classList.remove('dragging'));
+
+      chip.addEventListener('click', e => {
+        e.stopPropagation();
+        selectOrToggle(id, from);
+      });
+    });
+  }
+
+  function attachContainerHandlers(el, target) {
+    el.addEventListener('dragover', e => { e.preventDefault(); el.classList.add('drag-over'); });
+    el.addEventListener('dragleave', () => el.classList.remove('drag-over'));
+    el.addEventListener('drop', e => {
+      e.preventDefault();
+      el.classList.remove('drag-over');
+      onDrop(target);
+    });
+    el.addEventListener('click', () => {
+      if (!dragSource) return;
+      if (dragSource.from === target) { dragSource = null; render(); return; }
+      onDrop(target);
+    });
+  }
+
+  function render() {
+    const mode = orgPlaySelect.value;
+    const totalAvailable = allPlayers.filter(p => p.available).length;
+    const totalUnavailable = allPlayers.length - totalAvailable;
+
+    if (allPlayers.length) {
+      statusLine.innerHTML = `<strong>${allPlayers.length}</strong> players loaded &middot; ` +
+        `<strong>${totalAvailable}</strong> available &middot; ` +
+        `<strong>${totalUnavailable}</strong> unavailable (excluded) &middot; ` +
+        `Organized Play: <strong>${specLabel(mode)}</strong>`;
+    }
+
+    courtsGrid.innerHTML = '';
+    boxes.forEach((players, i) => {
+      const ok = boxSpecOk(players, mode);
+      const court = document.createElement('div');
+      court.className = 'court' + (ok ? ' valid' : '') + (dragSource ? ' droppable' : '');
+      court.innerHTML = `
+        <div class="court-header">
+          <div class="court-title">Court ${i + 1}</div>
+          <div class="court-badge ${ok ? 'ok' : 'bad'}">${ok ? 'OK' : 'NEEDS FIX'}</div>
+        </div>
+        <div class="court-count">${players.length} / ${COURT_SIZE} players</div>
+        <div class="player-list">${players.map(p => chipHtml(p, i)).join('')}</div>
+      `;
+      attachContainerHandlers(court, i);
+      courtsGrid.appendChild(court);
+      attachChipHandlers(court);
+    });
+
+    benchCount.textContent = `${bench.length} player(s)`;
+    benchList.innerHTML = bench.length
+      ? bench.map(p => chipHtml(p, 'bench')).join('')
+      : '<div class="bench-empty">No unassigned available players.</div>';
+    benchPanel.classList.toggle('droppable', !!dragSource);
+    attachChipHandlers(benchList);
+
+    if (dragSource) {
+      const p = findPlayerById(dragSource.playerId);
+      moveHint.hidden = !p;
+      moveHint.textContent = p
+        ? `Moving ${p.name} — tap a court or the bench to place them there, or tap their name again to cancel.`
+        : '';
+    } else {
+      moveHint.hidden = true;
+    }
+  }
+
+  // initial empty render of 6 boxes
+  render();
+})();
+</script>
+</body>
+</html>
