@@ -113,10 +113,6 @@
     border-color: var(--green-border);
     background: var(--green-bg);
   }
-  .court.drag-over {
-    outline: 2px dashed var(--accent);
-    outline-offset: 2px;
-  }
   .court-header {
     display: flex;
     justify-content: space-between;
@@ -153,15 +149,13 @@
     border-radius: 6px;
     padding: 8px 10px;
     font-size: 13px;
-    cursor: grab;
+    cursor: pointer;
     user-select: none;
     touch-action: manipulation;
     min-height: 40px;
     display: flex;
     align-items: center;
   }
-  .chip:active { cursor: grabbing; }
-  .chip.dragging { opacity: 0.4; }
   .chip.selected {
     border-color: var(--accent);
     background: #eaf2fb;
@@ -191,10 +185,6 @@
     background: #fbfbfc;
     padding: 12px;
     min-height: 70px;
-  }
-  .bench.drag-over {
-    outline: 2px dashed var(--accent);
-    outline-offset: 2px;
   }
   .bench-header {
     display: flex;
@@ -261,7 +251,7 @@
     font-size: 13px;
     margin-top: 12px;
   }
-  button, select, input[type="file"] {
+  button, select, input[type="file"], .court, .bench {
     touch-action: manipulation;
   }
   @media (max-width: 480px) {
@@ -284,7 +274,7 @@
 <body>
 
 <h1>STA Sunday Program Scheduler</h1>
-<div class="subtitle">Load your roster from a CSV file or a Google Sheet, pick an Organized Play format, auto-assign courts, then drag (or tap to pick up, tap to place) names between boxes to fine-tune.</div>
+<div class="subtitle">Load your roster from a CSV file or a Google Sheet, pick an Organized Play format, auto-assign courts, then tap two names to swap them (or tap one and an empty spot to move it there).</div>
 
 <div class="panel">
   <div class="controls">
@@ -739,8 +729,13 @@
     render();
   }
 
-  // ---------- Drag & drop ----------
-  let dragSource = null; // { playerId, from: 'bench' | courtIndex }
+  // ---------- Moving players: tap-to-swap ----------
+  // Pure click/tap based, on purpose: native HTML5 drag-and-drop doesn't work
+  // reliably on touch devices (and a draggable="true" chip can even interfere
+  // with plain taps registering on some mobile browsers), so this avoids it
+  // entirely. Tap one player then another to swap their spots; tap a player
+  // then an empty spot on a court or the bench to move them there instead.
+  let selected = null; // { playerId, from: 'bench' | courtIndex }
 
   function findAndRemove(playerId, from) {
     if (from === 'bench') {
@@ -754,14 +749,16 @@
     return null;
   }
 
-  function onDrop(target) {
-    if (!dragSource) return;
-    const player = findAndRemove(dragSource.playerId, dragSource.from);
-    if (!player) return;
-    if (target === 'bench') bench.push(player);
-    else boxes[target].push(player);
-    dragSource = null;
-    render();
+  function placeAt(player, location) {
+    if (location === 'bench') bench.push(player);
+    else boxes[location].push(player);
+  }
+
+  function swapPlayers(a, b) {
+    const playerA = findAndRemove(a.playerId, a.from);
+    const playerB = findAndRemove(b.playerId, b.from);
+    if (playerA) placeAt(playerA, b.from);
+    if (playerB) placeAt(playerB, a.from);
   }
 
   function findPlayerById(id) {
@@ -774,23 +771,31 @@
     return null;
   }
 
-  // Tap-to-move: tap a chip to pick it up, tap a court/bench to place it there.
-  // This is the primary way to move players on touch devices, since native
-  // HTML5 drag-and-drop (used below for desktop mouse dragging) isn't
-  // reliably supported on phone/tablet browsers.
-  function selectOrToggle(playerId, from) {
-    if (dragSource && dragSource.playerId === playerId) {
-      dragSource = null;
+  function handleChipTap(playerId, from) {
+    if (!selected) {
+      selected = { playerId, from };
+    } else if (selected.playerId === playerId) {
+      selected = null; // tapped the same chip again: cancel
     } else {
-      dragSource = { playerId, from };
+      swapPlayers(selected, { playerId, from });
+      selected = null;
     }
+    render();
+  }
+
+  function handleContainerTap(target) {
+    if (!selected) return;
+    if (selected.from === target) { selected = null; render(); return; }
+    const player = findAndRemove(selected.playerId, selected.from);
+    if (player) placeAt(player, target);
+    selected = null;
     render();
   }
 
   // ---------- Rendering ----------
   function chipHtml(player, from) {
-    const isSelected = dragSource && dragSource.playerId === player.id;
-    return `<div class="chip${isSelected ? ' selected' : ''}" draggable="true" data-id="${player.id}" data-from="${from}">
+    const isSelected = selected && selected.playerId === player.id;
+    return `<div class="chip${isSelected ? ' selected' : ''}" data-id="${player.id}" data-from="${from}">
       ${escapeHtml(player.name)}, ${escapeHtml(player.sex)}, ${escapeHtml(player.level)}
     </div>`;
   }
@@ -801,33 +806,15 @@
       const fromRaw = chip.dataset.from;
       const from = fromRaw === 'bench' ? 'bench' : Number(fromRaw);
 
-      chip.addEventListener('dragstart', e => {
-        dragSource = { playerId: id, from };
-        chip.classList.add('dragging');
-        e.dataTransfer.effectAllowed = 'move';
-      });
-      chip.addEventListener('dragend', () => chip.classList.remove('dragging'));
-
       chip.addEventListener('click', e => {
         e.stopPropagation();
-        selectOrToggle(id, from);
+        handleChipTap(id, from);
       });
     });
   }
 
   function attachContainerHandlers(el, target) {
-    el.addEventListener('dragover', e => { e.preventDefault(); el.classList.add('drag-over'); });
-    el.addEventListener('dragleave', () => el.classList.remove('drag-over'));
-    el.addEventListener('drop', e => {
-      e.preventDefault();
-      el.classList.remove('drag-over');
-      onDrop(target);
-    });
-    el.addEventListener('click', () => {
-      if (!dragSource) return;
-      if (dragSource.from === target) { dragSource = null; render(); return; }
-      onDrop(target);
-    });
+    el.addEventListener('click', () => handleContainerTap(target));
   }
 
   function render() {
@@ -846,7 +833,7 @@
     boxes.forEach((players, i) => {
       const ok = boxSpecOk(players, mode);
       const court = document.createElement('div');
-      court.className = 'court' + (ok ? ' valid' : '') + (dragSource ? ' droppable' : '');
+      court.className = 'court' + (ok ? ' valid' : '') + (selected ? ' droppable' : '');
       court.innerHTML = `
         <div class="court-header">
           <div class="court-title">Court ${i + 1}</div>
@@ -864,14 +851,14 @@
     benchList.innerHTML = bench.length
       ? bench.map(p => chipHtml(p, 'bench')).join('')
       : '<div class="bench-empty">No unassigned available players.</div>';
-    benchPanel.classList.toggle('droppable', !!dragSource);
+    benchPanel.classList.toggle('droppable', !!selected);
     attachChipHandlers(benchList);
 
-    if (dragSource) {
-      const p = findPlayerById(dragSource.playerId);
+    if (selected) {
+      const p = findPlayerById(selected.playerId);
       moveHint.hidden = !p;
       moveHint.textContent = p
-        ? `Moving ${p.name} — tap a court or the bench to place them there, or tap their name again to cancel.`
+        ? `${p.name} selected — tap another player to swap places, or tap an empty spot on a court or the bench to move them there. Tap ${p.name} again to cancel.`
         : '';
     } else {
       moveHint.hidden = true;

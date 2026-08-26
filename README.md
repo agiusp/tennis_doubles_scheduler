@@ -17,9 +17,10 @@ A single-page, no-install web app for assigning available players to 6 courts on
    - By play level and same-sex doubles
    - By play level and mixed doubles
 4. Click **Auto-Assign Courts** to fill the 6 boxes (up to 4 players each) from the available pool, using a best-effort grouping for the selected format.
-5. Move players between courts or the Bench to adjust manually:
-   - **Mouse (desktop):** drag a name chip and drop it on another court or the Bench.
-   - **Touch (phone/tablet):** tap a name to pick it up (it highlights and a banner appears), then tap the destination court or the Bench to place it there. Tap the same name again to cancel. This works better than drag-and-drop on touchscreens, and also lets you pick up a player, scroll down, and place them without holding a drag the whole way.
+5. Adjust manually by tapping (works the same with mouse or touch, so it behaves identically on a phone as on a laptop):
+   - **Tap one player, then another** to swap their places — the first tap highlights them and shows a banner; the second tap performs the swap. Works across any two courts, or a court and the Bench.
+   - **Tap one player, then an empty spot** on a court or the Bench (not on another player) to move them there without swapping.
+   - **Tap the same player twice** to cancel a pending selection.
    
    A court turns **green** when it has exactly 4 players who satisfy the selected format, and **red** otherwise.
 6. Use **Clear Courts** to send everyone back to the bench without re-running the file load.
@@ -28,7 +29,7 @@ Only players marked as available are ever placed on a court or shown in the benc
 
 ## Using it on a phone
 
-The page itself is fully responsive (single-column court layout, larger tap targets, tap-to-move interaction) and works in any mobile browser. The only catch is *getting the file onto the phone*, since `index.html` lives on your computer:
+The page itself is fully responsive (single-column court layout, larger tap targets, tap-to-swap interaction — no drag-and-drop anywhere, since that's unreliable on touchscreens) and works in any mobile browser. The only catch is *getting the file onto the phone*, since `index.html` lives on your computer:
 
 - **Easiest — local Wi-Fi server:** on the computer, from this folder run `python3 -m http.server 8000`, then find the computer's local IP (e.g. `ipconfig getifaddr en0` on macOS) and visit `http://<that-ip>:8000/index.html` in the phone's browser (same Wi-Fi network required).
 - **Or airdrop/email/cloud-sync** `index.html` (and a CSV) directly to the phone and open it from Files/Downloads — it runs standalone with no server needed, since everything is client-side.
