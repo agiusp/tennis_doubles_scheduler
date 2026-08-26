@@ -230,6 +230,28 @@
     color: var(--muted);
     max-width: 260px;
   }
+  .file-hint a {
+    color: var(--accent);
+  }
+  .or-divider {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: var(--muted);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin: 14px 0 4px;
+  }
+  .or-divider::before, .or-divider::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: #e2e5e9;
+  }
+  #sheetUrl {
+    width: 100%;
+  }
   .error-box {
     background: #fbe7e7;
     border: 1px solid var(--red-border);
@@ -262,7 +284,7 @@
 <body>
 
 <h1>STA Sunday Program Scheduler</h1>
-<div class="subtitle">Load your roster, pick an Organized Play format, auto-assign courts, then drag (or tap to pick up, tap to place) names between boxes to fine-tune.</div>
+<div class="subtitle">Load your roster from a CSV file or a Google Sheet, pick an Organized Play format, auto-assign courts, then drag (or tap to pick up, tap to place) names between boxes to fine-tune.</div>
 
 <div class="panel">
   <div class="controls">
@@ -288,9 +310,26 @@
     </div>
     <div class="field">
       <label>&nbsp;</label>
-      <span class="file-hint">CSV needs columns: Name, Level, Sex, Availability. Availability values like Yes/No, Y/N, True/False, Available/Unavailable, 1/0 are all understood.</span>
+      <span class="file-hint">Needs columns: Name, Level, Sex, Availability. Availability values like Yes/No, Y/N, True/False, Available/Unavailable, 1/0 are all understood.</span>
     </div>
   </div>
+
+  <div class="or-divider">or</div>
+
+  <div class="controls">
+    <div class="field" style="flex: 1; min-width: 240px;">
+      <label for="sheetUrl">Google Sheet URL</label>
+      <input type="url" id="sheetUrl" placeholder="https://docs.google.com/spreadsheets/d/..." value="https://docs.google.com/spreadsheets/d/1T8p18YhGXSUfXnrtMpeVhDhEravOVEe2bTI4U3qoQe0/edit?gid=0#gid=0">
+    </div>
+    <div class="field">
+      <button id="loadSheetBtn">Load from Google Sheet</button>
+    </div>
+    <div class="field">
+      <label>&nbsp;</label>
+      <span class="file-hint">Pre-filled with an example sheet — click Load to try it, or paste your own. Yours must be shared as "Anyone with the link — Viewer" and have the same header row, on the tab shown when you open the link (add #gid=... to the URL to target a specific tab). <a href="#" id="exampleSheetLink">Reset to the example</a>.</span>
+    </div>
+  </div>
+
   <div class="status-line" id="statusLine">No roster loaded yet.</div>
   <div id="errorBox"></div>
 </div>
@@ -322,7 +361,12 @@
   let boxes = Array.from({ length: NUM_COURTS }, () => []);
   let bench = [];
 
+  const EXAMPLE_SHEET_URL = 'https://docs.google.com/spreadsheets/d/1T8p18YhGXSUfXnrtMpeVhDhEravOVEe2bTI4U3qoQe0/edit?gid=0#gid=0';
+
   const fileInput = document.getElementById('csvFile');
+  const sheetUrlInput = document.getElementById('sheetUrl');
+  const loadSheetBtn = document.getElementById('loadSheetBtn');
+  const exampleSheetLink = document.getElementById('exampleSheetLink');
   const orgPlaySelect = document.getElementById('orgPlay');
   const autoAssignBtn = document.getElementById('autoAssignBtn');
   const clearBtn = document.getElementById('clearBtn');
@@ -335,6 +379,15 @@
   const moveHint = document.getElementById('moveHint');
 
   fileInput.addEventListener('change', handleFile);
+  loadSheetBtn.addEventListener('click', loadFromSheetUrl);
+  sheetUrlInput.addEventListener('keydown', e => {
+    if (e.key === 'Enter') loadFromSheetUrl();
+  });
+  exampleSheetLink.addEventListener('click', e => {
+    e.preventDefault();
+    sheetUrlInput.value = EXAMPLE_SHEET_URL;
+    loadFromSheetUrl();
+  });
   orgPlaySelect.addEventListener('change', render);
   autoAssignBtn.addEventListener('click', autoAssign);
   clearBtn.addEventListener('click', clearCourts);
@@ -406,12 +459,12 @@
     reader.readAsText(file);
   }
 
-  function loadRoster(text) {
-    showError('');
-    const rows = parseCSV(text);
-    if (rows.length < 2) throw new Error('File appears to have no data rows.');
+  // Shared by both the CSV and Google Sheet loaders: rows is an array of
+  // arrays (header row + data rows), same shape parseCSV() produces.
+  function loadRosterFromRows(rows) {
+    if (rows.length < 2) throw new Error('No data rows found (need a header row plus at least one player).');
 
-    const header = rows[0].map(h => h.trim().toLowerCase());
+    const header = rows[0].map(h => (h || '').trim().toLowerCase());
     const idx = {
       name: header.indexOf('name'),
       level: header.indexOf('level'),
@@ -445,6 +498,115 @@
     autoAssignBtn.disabled = false;
     clearBtn.disabled = false;
     render();
+  }
+
+  function loadRoster(text) {
+    showError('');
+    loadRosterFromRows(parseCSV(text));
+  }
+
+  // ---------- Google Sheets loading ----------
+  // Google's Sheets CSV/export endpoints don't send CORS headers, so a plain
+  // fetch() from a page's own origin is blocked by the browser. The classic
+  // workaround is JSONP: load the response as a <script> tag (not subject to
+  // CORS) and have Google's "gviz" endpoint call back into a global function
+  // with the sheet's data as a JS object.
+  function parseSheetUrl(raw) {
+    const idMatch = raw.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+    if (!idMatch) {
+      throw new Error('That doesn’t look like a Google Sheets URL — expected something like https://docs.google.com/spreadsheets/d/<ID>/edit');
+    }
+    const gidMatch = raw.match(/[#&?]gid=(\d+)/);
+    return { id: idMatch[1], gid: gidMatch ? gidMatch[1] : null };
+  }
+
+  function gvizTableToRows(table) {
+    // Header text comes from each column's label, not the first data row: if a
+    // column is numeric or boolean (e.g. a checkbox "Availability" column),
+    // asking gviz to hand back the header row as plain data (headers=0) makes
+    // it try to coerce header text like "Level" into a number and fail (null).
+    // Column labels are extracted separately and aren't subject to that.
+    const header = table.cols.map(c => c.label || '');
+    const dataRows = table.rows.map(row =>
+      (row.c || []).map(cell => {
+        if (!cell) return '';
+        const val = (cell.f !== undefined && cell.f !== null) ? cell.f : cell.v;
+        return val === null || val === undefined ? '' : String(val);
+      })
+    );
+    return [header, ...dataRows];
+  }
+
+  function loadGoogleSheetJsonp(id, gid) {
+    return new Promise((resolve, reject) => {
+      const cbName = '__staSheetCb' + Date.now() + Math.floor(Math.random() * 1e6);
+      let settled = false;
+      let timer;
+
+      function cleanup() {
+        delete window[cbName];
+        if (script.parentNode) script.parentNode.removeChild(script);
+        clearTimeout(timer);
+      }
+
+      window[cbName] = function (data) {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        if (!data || data.status === 'error') {
+          const msg = (data && data.errors && data.errors[0] && data.errors[0].message) ||
+            'The sheet returned an error (it may not be shared publicly, or the tab is wrong).';
+          reject(new Error(msg));
+          return;
+        }
+        resolve(data.table);
+      };
+
+      let src = `https://docs.google.com/spreadsheets/d/${encodeURIComponent(id)}/gviz/tq?tqx=out:json;responseHandler:${cbName}&headers=1`;
+      if (gid) src += `&gid=${encodeURIComponent(gid)}`;
+
+      const script = document.createElement('script');
+      script.src = src;
+      script.onerror = () => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        reject(new Error('Could not reach that Google Sheet. Check the URL, or that it’s shared as "Anyone with the link — Viewer".'));
+      };
+      timer = setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        reject(new Error('Timed out waiting for the sheet. Make sure it’s shared as "Anyone with the link — Viewer" and the URL/tab is correct.'));
+      }, 10000);
+
+      document.head.appendChild(script);
+    });
+  }
+
+  async function loadFromSheetUrl() {
+    const raw = sheetUrlInput.value.trim();
+    if (!raw) { showError('Enter a Google Sheet URL first.'); return; }
+    showError('');
+    loadSheetBtn.disabled = true;
+    const originalLabel = loadSheetBtn.textContent;
+    loadSheetBtn.textContent = 'Loading…';
+    try {
+      const { id, gid } = parseSheetUrl(raw);
+      const table = await loadGoogleSheetJsonp(id, gid);
+      loadRosterFromRows(gvizTableToRows(table));
+    } catch (err) {
+      let msg = 'Could not load Google Sheet: ' + (err && err.message ? err.message : String(err));
+      if (window.location.protocol === 'file:') {
+        msg += ' This page is open directly as a local file (file://) — some browsers, Safari in particular, block this kind of cross-site request from file:// pages even for public sheets. Try serving this folder with a local web server instead (see README) and opening it via http://localhost/, or try a different browser (Chrome/Firefox tend to allow it).';
+      } else {
+        msg += ' If the sheet is definitely shared as "Anyone with the link — Viewer", check whether a browser extension (ad blocker / privacy blocker) is blocking requests to docs.google.com.';
+      }
+      showError(msg);
+    } finally {
+      loadSheetBtn.disabled = false;
+      loadSheetBtn.textContent = originalLabel;
+    }
   }
 
   // ---------- Organized Play validation ----------
