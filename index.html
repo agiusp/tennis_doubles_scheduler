@@ -40,6 +40,11 @@
     padding: 16px 18px;
     margin-bottom: 18px;
   }
+  .panel-title {
+    font-weight: 700;
+    font-size: 14px;
+    margin-bottom: 12px;
+  }
   .controls {
     display: flex;
     flex-wrap: wrap;
@@ -113,6 +118,44 @@
     border-color: var(--green-border);
     background: var(--green-bg);
   }
+  /* Extra ring outside the existing green/red border, flagging that this
+     exact 4-player group has played together on a past date. Hovering (or
+     tapping/tabbing to, for touch/keyboard) shows which date(s) via a CSS
+     tooltip built from data-tooltip — more reliable across browsers than the
+     native title attribute, and lets us control its look. */
+  .court.repeat {
+    position: relative;
+    box-shadow: 0 0 0 3px var(--accent);
+  }
+  .court.repeat::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    left: 50%;
+    bottom: 100%;
+    transform: translateX(-50%);
+    margin-bottom: 10px;
+    background: #1c4a73;
+    color: #fff;
+    font-size: 12px;
+    font-weight: 400;
+    line-height: 1.4;
+    padding: 8px 10px;
+    border-radius: 6px;
+    width: max-content;
+    max-width: 240px;
+    text-align: left;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.15s ease;
+    z-index: 30;
+    pointer-events: none;
+  }
+  .court.repeat:hover::after,
+  .court.repeat:focus-visible::after {
+    opacity: 1;
+    visibility: visible;
+  }
   .court-header {
     display: flex;
     justify-content: space-between;
@@ -155,6 +198,11 @@
     min-height: 40px;
     display: flex;
     align-items: center;
+  }
+  .chip.cut {
+    border-color: var(--red-border);
+    background: var(--red-bg);
+    box-shadow: 0 0 0 1px var(--red-border);
   }
   .chip.selected {
     border-color: var(--accent);
@@ -215,6 +263,7 @@
   .swatch { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
   .swatch.green { background: var(--green-bg); border: 2px solid var(--green-border); }
   .swatch.red { background: var(--red-bg); border: 2px solid var(--red-border); }
+  .swatch.blue { background: #fff; border: 2px solid transparent; box-shadow: 0 0 0 2px var(--accent); }
   .file-hint {
     font-size: 11px;
     color: var(--muted);
@@ -277,6 +326,7 @@
 <div class="subtitle">Load your roster from a CSV file or a Google Sheet, pick an Organized Play format, auto-assign courts, then tap two names to swap them (or tap one and an empty spot to move it there).</div>
 
 <div class="panel">
+  <div class="panel-title">Roster</div>
   <div class="controls">
     <div class="field">
       <label for="csvFile">Roster file (CSV)</label>
@@ -303,7 +353,7 @@
     </div>
     <div class="field">
       <label>&nbsp;</label>
-      <span class="file-hint">Needs columns: Name, Level, Sex, Availability. Availability values like Yes/No, Y/N, True/False, Available/Unavailable, 1/0 are all understood.</span>
+      <span class="file-hint">Needs columns: Name, Level, Sex, Availability. Availability should be the sign-up order (1, 2, 3, ...) for players who signed up this week, or False for players who didn't. If more than 24 sign up, the last ones to sign up are benched automatically.</span>
     </div>
   </div>
 
@@ -311,8 +361,8 @@
 
   <div class="controls">
     <div class="field" style="flex: 1; min-width: 240px;">
-      <label for="sheetUrl">Google Sheet URL</label>
-      <input type="url" id="sheetUrl" placeholder="https://docs.google.com/spreadsheets/d/..." value="https://docs.google.com/spreadsheets/d/1T8p18YhGXSUfXnrtMpeVhDhEravOVEe2bTI4U3qoQe0/edit?gid=0#gid=0">
+      <label for="sheetUrl">Roster file Google sheet url</label>
+      <input type="url" id="sheetUrl" placeholder="https://docs.google.com/spreadsheets/d/..." value="https://docs.google.com/spreadsheets/d/1chPgcHE0WMHBzqYFdXXB4RAGKUGDPmyMSELh5KYs17w/edit?usp=sharing">
     </div>
     <div class="field">
       <button id="loadSheetBtn">Load from Google Sheet</button>
@@ -325,6 +375,39 @@
 
   <div class="status-line" id="statusLine">No roster loaded yet.</div>
   <div id="errorBox"></div>
+</div>
+
+<div class="panel">
+  <div class="panel-title">Past Play (optional)</div>
+  <div class="controls">
+    <div class="field">
+      <label for="pastPlayFile">Past Play file (CSV)</label>
+      <input type="file" id="pastPlayFile" accept=".csv,text/csv">
+    </div>
+    <div class="field">
+      <label>&nbsp;</label>
+      <span class="file-hint">Optional. Any columns are accepted for now — this will be used for a future feature.</span>
+    </div>
+  </div>
+
+  <div class="or-divider">or</div>
+
+  <div class="controls">
+    <div class="field" style="flex: 1; min-width: 240px;">
+      <label for="pastPlaySheetUrl">Past Play Google Sheet URL</label>
+      <input type="url" id="pastPlaySheetUrl" placeholder="https://docs.google.com/spreadsheets/d/..." value="https://docs.google.com/spreadsheets/d/16Bac95620Pg-euiz16EVSMX8hm1L3veozzgxvECoPCc/edit?usp=sharing">
+    </div>
+    <div class="field">
+      <button id="loadPastPlaySheetBtn">Load from Google Sheet</button>
+    </div>
+    <div class="field">
+      <label>&nbsp;</label>
+      <span class="file-hint">Must be shared as "Anyone with the link — Viewer" (add #gid=... to the URL to target a specific tab).</span>
+    </div>
+  </div>
+
+  <div class="status-line" id="pastPlayStatusLine">No past play data loaded yet.</div>
+  <div id="pastPlayErrorBox"></div>
 </div>
 
 <div class="move-hint" id="moveHint" hidden></div>
@@ -342,6 +425,7 @@
 <div class="legend">
   <div class="legend-item"><span class="swatch green"></span> Meets the selected Organized Play spec (and has exactly 4 players)</div>
   <div class="legend-item"><span class="swatch red"></span> Does not meet the spec, or does not have exactly 4 players</div>
+  <div class="legend-item"><span class="swatch blue"></span> This exact 4-player group appears in the loaded Past Play data (hover a court for dates)</div>
 </div>
 
 <script>
@@ -353,8 +437,18 @@
   let allPlayers = [];
   let boxes = Array.from({ length: NUM_COURTS }, () => []);
   let bench = [];
+  // ids of players benched by the last Auto-Assign purely for being the
+  // latest sign-ups cut to fit court capacity / a multiple of COURT_SIZE —
+  // shown with a red box and sorted to the end of the bench list. Cleared on
+  // a fresh roster load, and per-player as soon as that player is moved
+  // manually (a manual move overrides the automatic cut).
+  let benchedBySignupCut = new Set();
 
-  const EXAMPLE_SHEET_URL = 'https://docs.google.com/spreadsheets/d/1T8p18YhGXSUfXnrtMpeVhDhEravOVEe2bTI4U3qoQe0/edit?gid=0#gid=0';
+  const EXAMPLE_SHEET_URL = 'https://docs.google.com/spreadsheets/d/1chPgcHE0WMHBzqYFdXXB4RAGKUGDPmyMSELh5KYs17w/edit?usp=sharing';
+
+  /** Most recently loaded Past Play records, as an array of objects keyed by
+   *  column header. Not consumed anywhere yet — reserved for a future feature. */
+  let pastPlayRecords = [];
 
   const fileInput = document.getElementById('csvFile');
   const sheetUrlInput = document.getElementById('sheetUrl');
@@ -372,6 +466,12 @@
   const benchPanel = document.getElementById('benchPanel');
   const moveHint = document.getElementById('moveHint');
 
+  const pastPlayFileInput = document.getElementById('pastPlayFile');
+  const pastPlaySheetUrlInput = document.getElementById('pastPlaySheetUrl');
+  const loadPastPlaySheetBtn = document.getElementById('loadPastPlaySheetBtn');
+  const pastPlayStatusLine = document.getElementById('pastPlayStatusLine');
+  const pastPlayErrorBox = document.getElementById('pastPlayErrorBox');
+
   fileInput.addEventListener('change', handleFile);
   loadSheetBtn.addEventListener('click', loadFromSheetUrl);
   sheetUrlInput.addEventListener('keydown', e => {
@@ -387,6 +487,12 @@
   clearBtn.addEventListener('click', clearCourts);
   downloadBtn.addEventListener('click', downloadCourtsImage);
   attachContainerHandlers(benchPanel, 'bench'); // bench node persists across renders; attach once
+
+  pastPlayFileInput.addEventListener('change', handlePastPlayFile);
+  loadPastPlaySheetBtn.addEventListener('click', loadPastPlayFromSheetUrl);
+  pastPlaySheetUrlInput.addEventListener('keydown', e => {
+    if (e.key === 'Enter') loadPastPlayFromSheetUrl();
+  });
 
   function showError(msg) {
     errorBox.innerHTML = msg ? `<div class="error-box">${escapeHtml(msg)}</div>` : '';
@@ -432,9 +538,15 @@
     return (val || '').trim().toUpperCase() || '?';
   }
 
-  function isAvailable(val) {
-    const v = (val || '').trim().toLowerCase();
-    return ['yes', 'y', 'true', '1', 'available', 'avail'].includes(v);
+  // Availability now encodes sign-up order rather than a plain yes/no: a
+  // positive number (1, 2, 3, ...) is the order in which the player signed up
+  // this week, and "False" (or blank) means they didn't sign up at all.
+  // Returns the sign-up order, or null if the player isn't signed up.
+  function parseSignupOrder(val) {
+    const raw = (val || '').trim();
+    if (!raw || raw.toLowerCase() === 'false') return null;
+    const num = Number(raw);
+    return Number.isFinite(num) && num > 0 ? num : null;
   }
 
   function handleFile(e) {
@@ -476,12 +588,14 @@
       const row = rows[r];
       const name = (row[idx.name] || '').trim();
       if (!name) continue;
+      const signupOrder = parseSignupOrder(row[idx.availability]);
       players.push({
         id: r,
         name,
         level: (row[idx.level] || '').trim(),
         sex: normalizeSex(row[idx.sex]),
-        available: isAvailable(row[idx.availability])
+        available: signupOrder !== null,
+        signupOrder
       });
     }
 
@@ -490,6 +604,7 @@
     allPlayers = players;
     boxes = Array.from({ length: NUM_COURTS }, () => []);
     bench = allPlayers.filter(p => p.available);
+    benchedBySignupCut = new Set();
     autoAssignBtn.disabled = false;
     clearBtn.disabled = false;
     downloadBtn.disabled = false;
@@ -580,6 +695,24 @@
     });
   }
 
+  // Fetches and parses a Google Sheet URL into the same row shape parseCSV()
+  // produces. Shared by the Roster and Past Play sheet loaders.
+  async function fetchSheetRows(raw) {
+    const { id, gid } = parseSheetUrl(raw);
+    const table = await loadGoogleSheetJsonp(id, gid);
+    return gvizTableToRows(table);
+  }
+
+  function sheetErrorMessage(err) {
+    let msg = 'Could not load Google Sheet: ' + (err && err.message ? err.message : String(err));
+    if (window.location.protocol === 'file:') {
+      msg += ' This page is open directly as a local file (file://) — some browsers, Safari in particular, block this kind of cross-site request from file:// pages even for public sheets. Try serving this folder with a local web server instead (see README) and opening it via http://localhost/, or try a different browser (Chrome/Firefox tend to allow it).';
+    } else {
+      msg += ' If the sheet is definitely shared as "Anyone with the link — Viewer", check whether a browser extension (ad blocker / privacy blocker) is blocking requests to docs.google.com.';
+    }
+    return msg;
+  }
+
   async function loadFromSheetUrl() {
     const raw = sheetUrlInput.value.trim();
     if (!raw) { showError('Enter a Google Sheet URL first.'); return; }
@@ -588,20 +721,112 @@
     const originalLabel = loadSheetBtn.textContent;
     loadSheetBtn.textContent = 'Loading…';
     try {
-      const { id, gid } = parseSheetUrl(raw);
-      const table = await loadGoogleSheetJsonp(id, gid);
-      loadRosterFromRows(gvizTableToRows(table));
+      loadRosterFromRows(await fetchSheetRows(raw));
     } catch (err) {
-      let msg = 'Could not load Google Sheet: ' + (err && err.message ? err.message : String(err));
-      if (window.location.protocol === 'file:') {
-        msg += ' This page is open directly as a local file (file://) — some browsers, Safari in particular, block this kind of cross-site request from file:// pages even for public sheets. Try serving this folder with a local web server instead (see README) and opening it via http://localhost/, or try a different browser (Chrome/Firefox tend to allow it).';
-      } else {
-        msg += ' If the sheet is definitely shared as "Anyone with the link — Viewer", check whether a browser extension (ad blocker / privacy blocker) is blocking requests to docs.google.com.';
-      }
-      showError(msg);
+      showError(sheetErrorMessage(err));
     } finally {
       loadSheetBtn.disabled = false;
       loadSheetBtn.textContent = originalLabel;
+    }
+  }
+
+  // ---------- Past Play loading ----------
+  // Schema is intentionally unvalidated for now — any columns are accepted.
+  // What this data is used for will be decided later; for now it's just
+  // parsed and held in pastPlayRecords.
+  function showPastPlayError(msg) {
+    pastPlayErrorBox.innerHTML = msg ? `<div class="error-box">${escapeHtml(msg)}</div>` : '';
+  }
+
+  function loadPastPlayRecordsFromRows(rows) {
+    if (!rows.length) throw new Error('No data rows found.');
+    const header = rows[0].map((h, i) => (h || '').trim() || `Column ${i + 1}`);
+    const records = [];
+    for (let r = 1; r < rows.length; r++) {
+      const row = rows[r];
+      const rec = {};
+      header.forEach((h, i) => { rec[h] = (row[i] || '').trim(); });
+      records.push(rec);
+    }
+    pastPlayRecords = records;
+    pastPlayStatusLine.innerHTML = `<strong>${records.length}</strong> past play record(s) loaded.`;
+    render(); // re-check the current courts against the newly loaded history
+  }
+
+  // ---------- Past Play matching ----------
+  // Past Play records look like { Name, "Sep 6, 2026": "3", "Sep 13, 2026": "1", ... }:
+  // one row per player, one column per week, cell value is that week's court/group
+  // id (blank if the player didn't play that week). Turns that into a flat list of
+  // historical 4-player groupings, one per non-empty group id per date column.
+  function buildPastConfigurations() {
+    if (!pastPlayRecords.length) return [];
+    const headers = Object.keys(pastPlayRecords[0]);
+    const nameKey = headers.find(h => h.trim().toLowerCase() === 'name') || headers[0];
+    const dateCols = headers.filter(h => h !== nameKey);
+
+    const configs = [];
+    dateCols.forEach(dateLabel => {
+      const groups = new Map(); // group id (as typed in that column) -> Set(player name)
+      pastPlayRecords.forEach(rec => {
+        const name = (rec[nameKey] || '').trim();
+        const groupId = (rec[dateLabel] || '').trim();
+        if (!name || !groupId) return;
+        if (!groups.has(groupId)) groups.set(groupId, new Set());
+        groups.get(groupId).add(name);
+      });
+      groups.forEach(names => {
+        if (names.size === COURT_SIZE) configs.push({ date: dateLabel, names });
+      });
+    });
+    return configs;
+  }
+
+  function namesMatch(setA, setB) {
+    if (setA.size !== setB.size) return false;
+    for (const n of setA) if (!setB.has(n)) return false;
+    return true;
+  }
+
+  // Returns the list of past-play dates (column headers) where this exact set of
+  // 4 players was grouped together, or [] if there's no match / no past data.
+  function pastDatesForCourt(players, pastConfigs) {
+    if (players.length !== COURT_SIZE || !pastConfigs.length) return [];
+    const nameSet = new Set(players.map(p => p.name.trim()));
+    return pastConfigs.filter(cfg => namesMatch(cfg.names, nameSet)).map(cfg => cfg.date);
+  }
+
+  function handlePastPlayFile(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = function (evt) {
+      showPastPlayError('');
+      try {
+        loadPastPlayRecordsFromRows(parseCSV(evt.target.result));
+      } catch (err) {
+        showPastPlayError('Could not parse file: ' + err.message);
+      }
+    };
+    reader.onerror = function () {
+      showPastPlayError('Could not read the selected file.');
+    };
+    reader.readAsText(file);
+  }
+
+  async function loadPastPlayFromSheetUrl() {
+    const raw = pastPlaySheetUrlInput.value.trim();
+    if (!raw) { showPastPlayError('Enter a Google Sheet URL first.'); return; }
+    showPastPlayError('');
+    loadPastPlaySheetBtn.disabled = true;
+    const originalLabel = loadPastPlaySheetBtn.textContent;
+    loadPastPlaySheetBtn.textContent = 'Loading…';
+    try {
+      loadPastPlayRecordsFromRows(await fetchSheetRows(raw));
+    } catch (err) {
+      showPastPlayError(sheetErrorMessage(err));
+    } finally {
+      loadPastPlaySheetBtn.disabled = false;
+      loadPastPlaySheetBtn.textContent = originalLabel;
     }
   }
 
@@ -667,9 +892,18 @@
 
   function autoAssign() {
     const mode = orgPlaySelect.value;
-    const pool = allPlayers.filter(p => p.available);
+    const CAPACITY = NUM_COURTS * COURT_SIZE;
+    const signedUp = allPlayers.filter(p => p.available)
+      .sort((a, b) => a.signupOrder - b.signupOrder);
+    // Before any format-specific grouping: cap to court capacity, then trim
+    // down to a multiple of COURT_SIZE so a partial four never reaches the
+    // grouping logic below. Both cuts bench the latest sign-ups first.
+    const cappedCount = Math.min(signedUp.length, CAPACITY);
+    const usableCount = cappedCount - (cappedCount % COURT_SIZE);
+    const pool = signedUp.slice(0, usableCount);
     let groups = [];
-    let leftover = [];
+    let leftover = signedUp.slice(usableCount);
+    benchedBySignupCut = new Set(leftover.map(p => p.id));
 
     if (mode === 'same-sex') {
       const bySex = groupBy(pool, p => p.sex);
@@ -685,7 +919,7 @@
       const f = pool.filter(p => p.sex === 'F');
       const res = pairMixedGroups(m, f);
       groups = res.groups;
-      leftover = res.leftover;
+      leftover.push(...res.leftover);
     } else if (mode === 'level') {
       const byLevel = groupBy(pool, p => p.level);
       for (const [, list] of byLevel) {
@@ -767,10 +1001,8 @@
     const mode = orgPlaySelect.value;
     const ink = cssVar('--ink', '#1f2933');
     const muted = cssVar('--muted', '#6b7280');
-    const greenBg = cssVar('--green-bg', '#e6f6e9');
-    const greenBorder = cssVar('--green-border', '#2e9e4f');
-    const redBg = cssVar('--red-bg', '#fbe7e7');
-    const redBorder = cssVar('--red-border', '#c0392b');
+    const greyBg = '#e5e7eb';
+    const greyBorder = '#9ca3af';
     const chipBorder = '#d5d9de';
 
     const W = 1200;
@@ -838,11 +1070,10 @@
       const row = Math.floor(i / COLS);
       const x = PAD + col * (CELL_W + GAP);
       const y = HEADER_H + row * (CELL_H + GAP);
-      const ok = boxSpecOk(players, mode);
 
       ctx.lineWidth = 3;
-      ctx.fillStyle = ok ? greenBg : redBg;
-      ctx.strokeStyle = ok ? greenBorder : redBorder;
+      ctx.fillStyle = greyBg;
+      ctx.strokeStyle = greyBorder;
       roundRectPath(ctx, x, y, CELL_W, CELL_H, 12);
       ctx.fill();
       ctx.stroke();
@@ -850,20 +1081,6 @@
       ctx.fillStyle = ink;
       ctx.font = `bold 15px ${UI_FONT}`;
       ctx.fillText(`Court ${i + 1}`, x + 14, y + 14);
-
-      const badgeText = ok ? 'OK' : 'NEEDS FIX';
-      ctx.font = `bold 11px ${UI_FONT}`;
-      const badgeW = ctx.measureText(badgeText).width + 16;
-      const badgeH = 20;
-      const badgeX = x + CELL_W - 14 - badgeW;
-      const badgeY = y + 14;
-      ctx.fillStyle = ok ? greenBorder : redBorder;
-      roundRectPath(ctx, badgeX, badgeY, badgeW, badgeH, badgeH / 2);
-      ctx.fill();
-      ctx.fillStyle = '#ffffff';
-      ctx.textAlign = 'center';
-      ctx.fillText(badgeText, badgeX + badgeW / 2, badgeY + 4);
-      ctx.textAlign = 'left';
 
       ctx.fillStyle = muted;
       ctx.font = `11px ${UI_FONT}`;
@@ -956,8 +1173,8 @@
   function swapPlayers(a, b) {
     const playerA = findAndRemove(a.playerId, a.from);
     const playerB = findAndRemove(b.playerId, b.from);
-    if (playerA) placeAt(playerA, b.from);
-    if (playerB) placeAt(playerB, a.from);
+    if (playerA) { placeAt(playerA, b.from); benchedBySignupCut.delete(playerA.id); }
+    if (playerB) { placeAt(playerB, a.from); benchedBySignupCut.delete(playerB.id); }
   }
 
   function findPlayerById(id) {
@@ -986,7 +1203,7 @@
     if (!selected) return;
     if (selected.from === target) { selected = null; render(); return; }
     const player = findAndRemove(selected.playerId, selected.from);
-    if (player) placeAt(player, target);
+    if (player) { placeAt(player, target); benchedBySignupCut.delete(player.id); }
     selected = null;
     render();
   }
@@ -994,7 +1211,8 @@
   // ---------- Rendering ----------
   function chipHtml(player, from) {
     const isSelected = selected && selected.playerId === player.id;
-    return `<div class="chip${isSelected ? ' selected' : ''}" data-id="${player.id}" data-from="${from}">
+    const isCut = benchedBySignupCut.has(player.id);
+    return `<div class="chip${isSelected ? ' selected' : ''}${isCut ? ' cut' : ''}" data-id="${player.id}" data-from="${from}">
       ${escapeHtml(player.name)}, ${escapeHtml(player.sex)}, ${escapeHtml(player.level)}
     </div>`;
   }
@@ -1029,10 +1247,17 @@
     }
 
     courtsGrid.innerHTML = '';
+    const pastConfigs = buildPastConfigurations();
     boxes.forEach((players, i) => {
       const ok = boxSpecOk(players, mode);
+      const pastDates = pastDatesForCourt(players, pastConfigs);
+      const isRepeat = pastDates.length > 0;
       const court = document.createElement('div');
-      court.className = 'court' + (ok ? ' valid' : '') + (selected ? ' droppable' : '');
+      court.className = 'court' + (ok ? ' valid' : '') + (selected ? ' droppable' : '') + (isRepeat ? ' repeat' : '');
+      if (isRepeat) {
+        court.dataset.tooltip = `Played together before, on: ${pastDates.join(', ')}`;
+        court.tabIndex = 0; // lets touch/keyboard users reveal the tooltip too, not just mouse hover
+      }
       court.innerHTML = `
         <div class="court-header">
           <div class="court-title">Court ${i + 1}</div>
@@ -1047,8 +1272,12 @@
     });
 
     benchCount.textContent = `${bench.length} player(s)`;
-    benchList.innerHTML = bench.length
-      ? bench.map(p => chipHtml(p, 'bench')).join('')
+    // Players cut for sign-up order (capacity / multiple-of-4 trim) are
+    // pinned to the end of the list, after everyone else.
+    const sortedBench = [...bench].sort((a, b) =>
+      (benchedBySignupCut.has(a.id) ? 1 : 0) - (benchedBySignupCut.has(b.id) ? 1 : 0));
+    benchList.innerHTML = sortedBench.length
+      ? sortedBench.map(p => chipHtml(p, 'bench')).join('')
       : '<div class="bench-empty">No unassigned available players.</div>';
     benchPanel.classList.toggle('droppable', !!selected);
     attachChipHandlers(benchList);
